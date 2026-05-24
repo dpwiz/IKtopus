@@ -25,8 +25,10 @@ export class Fish {
     wanderAngle: number = 0;
     hue: number;
     timeOffset: number;
+    type: 'normal' | 'predator';
+    sizeScale: number;
 
-    constructor(x: number, targetX: number, y: number, targetY: number) {
+    constructor(x: number, targetX: number, y: number, targetY: number, type: 'normal' | 'predator' = 'normal') {
         this.x = x;
         this.y = y;
         this.vx = 0;
@@ -34,7 +36,9 @@ export class Fish {
         this.targetX = targetX;
         this.targetY = targetY;
         this.state = 'seeking';
-        this.hue = Math.floor(Math.random() * 40) + 15; // Oranges, ambers
+        this.type = type;
+        this.sizeScale = type === 'predator' ? 2.5 : 1;
+        this.hue = type === 'predator' ? 0 : Math.floor(Math.random() * 40) + 15; // Oranges, ambers, predator is red
         this.timeOffset = Math.random() * 1000;
     }
 
@@ -62,13 +66,17 @@ export class Fish {
             this.vx += ax;
             this.vy += ay;
             
-            // Flocking behavior
+            // Flocking & Predator behavior
             let separationDistance = 40;
             let neighborDistance = 150;
             let sepX = 0, sepY = 0;
             let alignX = 0, alignY = 0;
             let cohX = 0, cohY = 0;
             let count = 0;
+            
+            let predAvoidX = 0, predAvoidY = 0;
+            let preyCentX = 0, preyCentY = 0;
+            let preyCount = 0;
 
             for (let other of fishes) {
                 if (other === this || other.state === 'caught' || other.state === 'eaten') continue;
@@ -76,69 +84,108 @@ export class Fish {
                 let dy = this.y - other.y;
                 let dist = Math.hypot(dx, dy);
 
-                if (dist > 0 && dist < separationDistance) {
-                    sepX += dx / dist;
-                    sepY += dy / dist;
-                }
+                if (this.type === 'normal' && other.type === 'predator') {
+                    if (dist > 0 && dist < 250) {
+                        predAvoidX += dx / dist;
+                        predAvoidY += dy / dist;
+                    }
+                } else if (this.type === 'predator' && other.type === 'normal') {
+                    if (dist > 0 && dist < 500) {
+                        preyCentX += other.x;
+                        preyCentY += other.y;
+                        preyCount++;
+                    }
+                } else if (this.type === other.type) {
+                    if (dist > 0 && dist < separationDistance) {
+                        sepX += dx / dist;
+                        sepY += dy / dist;
+                    }
 
-                if (dist > 0 && dist < neighborDistance) {
-                    alignX += other.vx;
-                    alignY += other.vy;
-                    cohX += other.x;
-                    cohY += other.y;
-                    count++;
-                }
-            }
-
-            if (count > 0) {
-                alignX /= count;
-                alignY /= count;
-                cohX /= count;
-                cohY /= count;
-
-                let alignSpeed = Math.hypot(alignX, alignY);
-                if (alignSpeed > 0) {
-                   this.vx += (alignX / alignSpeed) * 0.05;
-                   this.vy += (alignY / alignSpeed) * 0.05;
-                }
-
-                let cdx = cohX - this.x;
-                let cdy = cohY - this.y;
-                let cohSpeed = Math.hypot(cdx, cdy);
-                if (cohSpeed > 0) {
-                   this.vx += (cdx / cohSpeed) * 0.02;
-                   this.vy += (cdy / cohSpeed) * 0.02;
-                }
-            }
-            
-            let sepSpeed = Math.hypot(sepX, sepY);
-            if (sepSpeed > 0) {
-               this.vx += (sepX / sepSpeed) * 0.1;
-               this.vy += (sepY / sepSpeed) * 0.1;
-            }
-            
-            // Treat attraction
-            let closestTreat: Treat | null = null;
-            let closestTreatDist = 1000;
-            for (let t of treats) {
-                if (!t.active) continue;
-                let tdx = t.x - this.x;
-                let tdy = t.y - this.y;
-                let tdist = Math.hypot(tdx, tdy);
-                if (tdist < closestTreatDist) {
-                    closestTreatDist = tdist;
-                    closestTreat = t;
+                    if (dist > 0 && dist < neighborDistance) {
+                        alignX += other.vx;
+                        alignY += other.vy;
+                        cohX += other.x;
+                        cohY += other.y;
+                        count++;
+                    }
                 }
             }
 
-            if (closestTreat && closestTreatDist < 600) { 
-                let tdx = closestTreat.x - this.x;
-                let tdy = closestTreat.y - this.y;
-                this.vx += (tdx / closestTreatDist) * 0.25;
-                this.vy += (tdy / closestTreatDist) * 0.25;
+            if (this.type === 'normal') {
+                if (count > 0) {
+                    alignX /= count;
+                    alignY /= count;
+                    cohX /= count;
+                    cohY /= count;
 
-                if (closestTreatDist < 12) {
-                    closestTreat.active = false;
+                    let alignSpeed = Math.hypot(alignX, alignY);
+                    if (alignSpeed > 0) {
+                       this.vx += (alignX / alignSpeed) * 0.05;
+                       this.vy += (alignY / alignSpeed) * 0.05;
+                    }
+
+                    let cdx = cohX - this.x;
+                    let cdy = cohY - this.y;
+                    let cohSpeed = Math.hypot(cdx, cdy);
+                    if (cohSpeed > 0) {
+                       this.vx += (cdx / cohSpeed) * 0.02;
+                       this.vy += (cdy / cohSpeed) * 0.02;
+                    }
+                }
+                
+                let sepSpeed = Math.hypot(sepX, sepY);
+                if (sepSpeed > 0) {
+                   this.vx += (sepX / sepSpeed) * 0.1;
+                   this.vy += (sepY / sepSpeed) * 0.1;
+                }
+
+                let predAvoidSpeed = Math.hypot(predAvoidX, predAvoidY);
+                if (predAvoidSpeed > 0) {
+                    this.vx += (predAvoidX / predAvoidSpeed) * 0.3; // High priority escape
+                    this.vy += (predAvoidY / predAvoidSpeed) * 0.3;
+                }
+                
+                // Treat attraction
+                let closestTreat: Treat | null = null;
+                let closestTreatDist = 1000;
+                for (let t of treats) {
+                    if (!t.active) continue;
+                    let tdx = t.x - this.x;
+                    let tdy = t.y - this.y;
+                    let tdist = Math.hypot(tdx, tdy);
+                    if (tdist < closestTreatDist) {
+                        closestTreatDist = tdist;
+                        closestTreat = t;
+                    }
+                }
+
+                if (closestTreat && closestTreatDist < 600) { 
+                    let tdx = closestTreat.x - this.x;
+                    let tdy = closestTreat.y - this.y;
+                    this.vx += (tdx / closestTreatDist) * 0.25;
+                    this.vy += (tdy / closestTreatDist) * 0.25;
+
+                    if (closestTreatDist < 12) {
+                        closestTreat.active = false;
+                    }
+                }
+            } else if (this.type === 'predator') {
+                if (preyCount > 0) {
+                    preyCentX /= preyCount;
+                    preyCentY /= preyCount;
+                    let cdx = preyCentX - this.x;
+                    let cdy = preyCentY - this.y;
+                    let cohSpeed = Math.hypot(cdx, cdy);
+                    if (cohSpeed > 0) {
+                       this.vx += (cdx / cohSpeed) * 0.04;
+                       this.vy += (cdy / cohSpeed) * 0.04;
+                    }
+                }
+                
+                let sepSpeed = Math.hypot(sepX, sepY);
+                if (sepSpeed > 0) {
+                   this.vx += (sepX / sepSpeed) * 0.05;
+                   this.vy += (sepY / sepSpeed) * 0.05;
                 }
             }
             
@@ -152,9 +199,10 @@ export class Fish {
 
         // Apply drag & limit speed
         let speed = Math.hypot(this.vx, this.vy);
-        if (speed > 4) {
-            this.vx = (this.vx / speed) * 4;
-            this.vy = (this.vy / speed) * 4;
+        let maxSpeed = this.type === 'predator' ? 2 : 4;
+        if (speed > maxSpeed) {
+            this.vx = (this.vx / speed) * maxSpeed;
+            this.vy = (this.vy / speed) * maxSpeed;
         }
 
         this.x += this.vx;
@@ -519,6 +567,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
     const drawFish = (f: Fish) => {
         ctx.save();
         ctx.translate(f.x, f.y);
+        ctx.scale(f.sizeScale, f.sizeScale);
         let angle = Math.atan2(f.vy, f.vx);
         if (f.vx === 0 && f.vy === 0 && f.state === 'caught') {
             angle = octopus.time * 0.1; // Flail when caught
@@ -561,10 +610,27 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         
         let cx = w / 2 + (Math.random() - 0.5) * w * 0.6;
         let cy = h / 2 + (Math.random() - 0.5) * h * 0.6;
-        fishes.push(new Fish(sx, cx, sy, cy));
+        fishes.push(new Fish(sx, cx, sy, cy, 'normal'));
+    };
+
+    const spawnPredatorFish = () => {
+        let w = window.innerWidth;
+        let h = window.innerHeight;
+        let sx = -100, sy = Math.random() * h;
+        let cx = w / 2 + (Math.random() - 0.5) * w * 0.8;
+        let cy = h / 2 + (Math.random() - 0.5) * h * 0.8;
+        fishes.push(new Fish(sx, cx, sy, cy, 'predator'));
     };
 
     const loop = () => {
+        let predatorCount = 0;
+        for (let f of fishes) {
+            if (f.type === 'predator' && f.state !== 'eaten') predatorCount++;
+        }
+        if (predatorCount === 0) {
+            spawnPredatorFish();
+        }
+
         if (Math.random() < 0.015 && fishes.length < 25) {
             spawnRandomFish();
         }
