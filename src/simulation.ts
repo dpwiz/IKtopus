@@ -236,6 +236,12 @@ export class Octopus {
             }
 
             if (t.state === 'idle') {
+                let prevId = (t.id - 1 + this.tentacles.length) % this.tentacles.length;
+                let nextId = (t.id + 1) % this.tentacles.length;
+                if (this.tentacles[prevId].state !== 'idle' || this.tentacles[nextId].state !== 'idle') {
+                    continue;
+                }
+
                 let maxReach = t.particles.length * t.segmentLength * 0.95;
                 let closestDist = maxReach;
                 let target: Fish | null = null;
