@@ -168,7 +168,7 @@ export class Tentacle {
     baseAngle: number;
     id: number;
     targetFish: Fish | null = null;
-    state: 'idle' | 'reaching' | 'feeding' = 'idle';
+    state: 'idle' | 'reaching' | 'feeding' | 'unfurling' = 'idle';
     timeOnTarget: number = 0;
 
     constructor(id: number, spawnX: number, spawnY: number, baseAngle: number, numSegments: number, segmentLength: number) {
@@ -231,6 +231,18 @@ export class Octopus {
                 if (Math.random() < (t.timeOnTarget / 10000)) {
                     t.state = 'idle';
                     t.targetFish = null;
+                    t.timeOnTarget = 0;
+                }
+            } else if (t.state === 'feeding' && t.targetFish) {
+                t.timeOnTarget++;
+                if (t.timeOnTarget > 350) {
+                    t.state = 'unfurling';
+                    t.timeOnTarget = 0;
+                }
+            } else if (t.state === 'unfurling' && t.targetFish) {
+                t.timeOnTarget++;
+                if (t.timeOnTarget > 120) {
+                    t.state = 'feeding';
                     t.timeOnTarget = 0;
                 }
             }
@@ -355,6 +367,15 @@ export class Octopus {
                     end.x += (dx / dist) * 4.0;
                     end.y += (dy / dist) * 4.0;
                 }
+            } else if (t.state === 'unfurling' && t.targetFish) {
+                let end = t.particles[t.particles.length - 1];
+                let dx = (this.x + Math.cos(t.baseAngle) * 300) - end.x;
+                let dy = (this.y + Math.sin(t.baseAngle) * 300) - end.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > 0) {
+                    end.x += (dx / dist) * 3.0;
+                    end.y += (dy / dist) * 3.0;
+                }
             } else {
                 let angle = t.baseAngle;
                 let outwardX = Math.cos(angle) * 0.25;
@@ -439,7 +460,7 @@ export class Octopus {
 
         // Lock caught fishes to the tentacles
         for (let t of this.tentacles) {
-            if (t.state === 'feeding' && t.targetFish) {
+            if ((t.state === 'feeding' || t.state === 'unfurling') && t.targetFish) {
                 let end = t.particles[t.particles.length - 1];
                 t.targetFish.x = end.x;
                 t.targetFish.y = end.y;
