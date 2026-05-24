@@ -1,0 +1,6 @@
+{
+  "name": "Octopus IK Simulator",
+  "description": "An interactive, physics-based octopus simulation with inverse kinematics. Click or tap to spawn fish that the tentacles organically track and catch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
