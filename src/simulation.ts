@@ -7,6 +7,13 @@ export interface Particle {
     index: number;
 }
 
+export interface Treat {
+    x: number;
+    y: number;
+    vy: number;
+    active: boolean;
+}
+
 export class Fish {
     x: number;
     y: number;
@@ -31,7 +38,7 @@ export class Fish {
         this.timeOffset = Math.random() * 1000;
     }
 
-    update(fishes: Fish[]) {
+    update(fishes: Fish[], treats: Treat[]) {
         if (this.state === 'caught' || this.state === 'eaten') return;
 
         if (this.state === 'seeking') {
@@ -108,6 +115,31 @@ export class Fish {
             if (sepSpeed > 0) {
                this.vx += (sepX / sepSpeed) * 0.1;
                this.vy += (sepY / sepSpeed) * 0.1;
+            }
+            
+            // Treat attraction
+            let closestTreat: Treat | null = null;
+            let closestTreatDist = 1000;
+            for (let t of treats) {
+                if (!t.active) continue;
+                let tdx = t.x - this.x;
+                let tdy = t.y - this.y;
+                let tdist = Math.hypot(tdx, tdy);
+                if (tdist < closestTreatDist) {
+                    closestTreatDist = tdist;
+                    closestTreat = t;
+                }
+            }
+
+            if (closestTreat && closestTreatDist < 600) { 
+                let tdx = closestTreat.x - this.x;
+                let tdy = closestTreat.y - this.y;
+                this.vx += (tdx / closestTreatDist) * 0.25;
+                this.vy += (tdy / closestTreatDist) * 0.25;
+
+                if (closestTreatDist < 12) {
+                    closestTreat.active = false;
+                }
             }
             
             // Repel from edges gently
@@ -422,6 +454,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
     resize();
     
     const fishes: Fish[] = [];
+    const treats: Treat[] = [];
     const octopus = new Octopus(window.innerWidth / 2, window.innerHeight / 2);
     
     const clickHandler = (e: MouseEvent) => {
@@ -429,18 +462,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         let cx = e.clientX - rect.left;
         let cy = e.clientY - rect.top;
         
-        let margin = 60;
-        let w = window.innerWidth;
-        let h = window.innerHeight;
-        let sx = 0, sy = 0;
-        let rand = Math.random();
-        
-        if (rand < 0.25) { sx = Math.random() * w; sy = -margin; }
-        else if (rand < 0.5) { sx = w + margin; sy = Math.random() * h; }
-        else if (rand < 0.75) { sx = Math.random() * w; sy = h + margin; }
-        else { sx = -margin; sy = Math.random() * h; }
-        
-        fishes.push(new Fish(sx, cx, sy, cy));
+        treats.push({ x: cx, y: cy, vy: 1.5, active: true });
     };
     
     canvas.addEventListener('click', clickHandler);
@@ -522,13 +544,28 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
 
         octopus.update(fishes);
         
+        for (let j = treats.length - 1; j >= 0; j--) {
+            let t = treats[j];
+            t.y += t.vy;
+            if (t.y > window.innerHeight + 10 || !t.active) {
+                treats.splice(j, 1);
+            }
+        }
+        
         for (let j = fishes.length - 1; j >= 0; j--) {
             let f = fishes[j];
             if (f.state === 'eaten') fishes.splice(j, 1);
-            else f.update(fishes);
+            else f.update(fishes, treats);
         }
         
         drawBackground(window.innerWidth, window.innerHeight, octopus.time);
+        
+        for (let t of treats) {
+            ctx.fillStyle = '#fef08a'; // yellow-200
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
         
         // Draw fishes
         for (let f of fishes) drawFish(f);
