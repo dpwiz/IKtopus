@@ -32,6 +32,8 @@ export class Fish {
     dashCooldown: number = 0;
     dashDuration: number = 0;
     eatenTime: number = 0;
+    lookX: number = 0;
+    lookY: number = 0;
 
     constructor(x: number, targetX: number, y: number, targetY: number, type: 'normal' | 'predator' = 'normal') {
         this.x = x;
@@ -255,6 +257,22 @@ export class Fish {
             if (odist < 350) {
                 this.vx += (odx / odist) * 0.6;
                 this.vy += (ody / odist) * 0.6;
+            }
+            
+            if (this.type === 'predator') {
+                if (this.draggedPrey) {
+                    this.lookX = this.draggedPrey.x;
+                    this.lookY = this.draggedPrey.y;
+                } else if (preyCount > 0) {
+                    this.lookX = preyCentX;
+                    this.lookY = preyCentY;
+                } else {
+                    this.lookX = this.x + this.vx;
+                    this.lookY = this.y + this.vy;
+                }
+            } else {
+                this.lookX = this.x + this.vx;
+                this.lookY = this.y + this.vy;
             }
         }
 
@@ -698,10 +716,19 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
             ctx.moveTo(6, -3); ctx.lineTo(4, -1);
             ctx.stroke();
         } else {
+            let pupilX = 5.5;
+            let pupilY = -2;
+            if (f.lookX !== 0 || f.lookY !== 0) {
+                let lookAngle = Math.atan2(f.lookY - f.y, f.lookX - f.x);
+                let relAngle = lookAngle - angle;
+                pupilX = 5 + Math.cos(relAngle) * 1;
+                pupilY = -2 + Math.sin(relAngle) * 1;
+            }
+
             ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(5, -2, 2, 0, Math.PI*2); ctx.fill();
             ctx.fillStyle = '#0f172a';
-            ctx.beginPath(); ctx.arc(5.5, -2, 1, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(pupilX, pupilY, 1, 0, Math.PI*2); ctx.fill();
         }
         
         ctx.restore();
@@ -777,7 +804,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         // Draw tentacles
         for (let t of octopus.tentacles) {
             let pts = t.particles;
-            ctx.fillStyle = '#581c87'; // purple-900
+            ctx.fillStyle = '#450a0a'; // dark red
             
             ctx.beginPath();
             for (let i = 0; i < pts.length; i++) {
@@ -815,7 +842,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
             ctx.fill();
             
             // Draw suckers
-            ctx.fillStyle = '#d8b4fe'; // purple-300
+            ctx.fillStyle = '#f87171'; // bright red
             for(let i=2; i<pts.length-1; i+=2) {
                 let p = pts[i];
                 let pNext = pts[i+1];
@@ -837,32 +864,45 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         // Draw octopus body
         let bx = octopus.x;
         let by = octopus.y;
-        let r = octopus.radius;
+        let r = octopus.radius + 18; // Make central body visually larger
         let grad = ctx.createRadialGradient(bx, by, r*0.3, bx, by, r);
-        grad.addColorStop(0, '#7e22ce'); // purple-700
-        grad.addColorStop(1, '#3b0764'); // purple-950
+        grad.addColorStop(0, '#991b1b'); // red-800
+        grad.addColorStop(1, '#450a0a'); // red-950
         ctx.fillStyle = grad;
         
         ctx.beginPath();
         ctx.ellipse(bx, by, r * 1.15, r * 0.95, Math.sin(octopus.time*0.01)*0.1, 0, Math.PI*2);
         ctx.fill();
         
-        // Octopus Eyes
+        // Scary Octopus Eyes
         let eyeR = r * 0.55;
-        let ex1 = bx + Math.cos(-Math.PI/2 - 0.4) * eyeR;
-        let ey1 = by + Math.sin(-Math.PI/2 - 0.4) * eyeR;
-        let ex2 = bx + Math.cos(-Math.PI/2 + 0.4) * eyeR;
-        let ey2 = by + Math.sin(-Math.PI/2 + 0.4) * eyeR;
+        let ex1 = bx + Math.cos(-Math.PI/2 - 0.45) * eyeR;
+        let ey1 = by + Math.sin(-Math.PI/2 - 0.45) * eyeR;
+        let ex2 = bx + Math.cos(-Math.PI/2 + 0.45) * eyeR;
+        let ey2 = by + Math.sin(-Math.PI/2 + 0.45) * eyeR;
         
-        ctx.fillStyle = '#fef3c7'; 
-        ctx.beginPath(); ctx.arc(ex1, ey1, r*0.18, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(ex2, ey2, r*0.18, 0, Math.PI*2); ctx.fill();
-        
-        ctx.fillStyle = '#0f172a';
         let pOffset1 = Math.cos(octopus.time*0.015) * r*0.05;
         let pOffset2 = Math.sin(octopus.time*0.013) * r*0.05;
-        ctx.beginPath(); ctx.arc(ex1 + pOffset1, ey1 + pOffset2, r*0.08, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(ex2 + pOffset1, ey2 + pOffset2, r*0.08, 0, Math.PI*2); ctx.fill();
+
+        // Left Eye (Slanted)
+        ctx.save();
+        ctx.translate(ex1, ey1);
+        ctx.rotate(0.35); // Slanted inwards
+        ctx.fillStyle = '#fef08a'; // Glowing yellow sclera
+        ctx.beginPath(); ctx.ellipse(0, 0, r*0.25, r*0.12, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000000'; // Slit pupil
+        ctx.beginPath(); ctx.ellipse(pOffset1, pOffset2, r*0.04, r*0.1, 0, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+
+        // Right Eye (Slanted)
+        ctx.save();
+        ctx.translate(ex2, ey2);
+        ctx.rotate(-0.35); // Slanted inwards
+        ctx.fillStyle = '#fef08a'; // Glowing yellow sclera
+        ctx.beginPath(); ctx.ellipse(0, 0, r*0.25, r*0.12, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000000'; // Slit pupil
+        ctx.beginPath(); ctx.ellipse(pOffset1, pOffset2, r*0.04, r*0.1, 0, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
         
         animationId = requestAnimationFrame(loop);
     };
