@@ -38,7 +38,7 @@ export class Fish {
         this.state = 'seeking';
         this.type = type;
         this.sizeScale = type === 'predator' ? 2.5 : 1;
-        this.hue = type === 'predator' ? 0 : Math.floor(Math.random() * 40) + 15; // Oranges, ambers, predator is red
+        this.hue = type === 'predator' ? Math.floor(Math.random() * 35) : Math.floor(Math.random() * 120) + 120; // Predators red/orange, normal green/blue
         this.timeOffset = Math.random() * 1000;
     }
 
