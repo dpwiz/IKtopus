@@ -47,7 +47,7 @@ export class Fish {
         this.timeOffset = Math.random() * 1000;
     }
 
-    update(fishes: Fish[], treats: Treat[]) {
+    update(fishes: Fish[], treats: Treat[], octopus: Octopus) {
         if (this.state === 'eaten') {
             this.eatenTime++;
             if (this.eatenTime > 60) {
@@ -135,7 +135,7 @@ export class Fish {
                     }
                 } else if (this.type === other.type) {
                     if (isCaught) {
-                        if (dist > 0 && dist < 120) {
+                        if (dist > 0 && dist < 250) {
                             caughtAvoidX += dx / dist;
                             caughtAvoidY += dy / dist;
                         }
@@ -193,8 +193,8 @@ export class Fish {
                 
                 let caughtAvoidSpeed = Math.hypot(caughtAvoidX, caughtAvoidY);
                 if (caughtAvoidSpeed > 0) {
-                    this.vx += (caughtAvoidX / caughtAvoidSpeed) * 0.08; // Mild avoidance
-                    this.vy += (caughtAvoidY / caughtAvoidSpeed) * 0.08;
+                    this.vx += (caughtAvoidX / caughtAvoidSpeed) * 0.35; // Stronger avoidance
+                    this.vy += (caughtAvoidY / caughtAvoidSpeed) * 0.35;
                 }
                 
                 // Treat attraction
@@ -247,6 +247,15 @@ export class Fish {
             if (this.x > window.innerWidth - margin) this.vx -= 0.2;
             if (this.y < margin) this.vy += 0.2;
             if (this.y > window.innerHeight - margin) this.vy -= 0.2;
+            
+            // Avoid octopus
+            let odx = this.x - octopus.x;
+            let ody = this.y - octopus.y;
+            let odist = Math.hypot(odx, ody);
+            if (odist < 350) {
+                this.vx += (odx / odist) * 0.6;
+                this.vy += (ody / odist) * 0.6;
+            }
         }
 
         // Apply drag & limit speed
@@ -750,7 +759,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         for (let j = fishes.length - 1; j >= 0; j--) {
             let f = fishes[j];
             if (f.state === 'husk' && f.y > window.innerHeight + 50) fishes.splice(j, 1);
-            else f.update(fishes, treats);
+            else f.update(fishes, treats, octopus);
         }
         
         drawBackground(window.innerWidth, window.innerHeight, octopus.time);
