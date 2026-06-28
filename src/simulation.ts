@@ -760,33 +760,47 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         fishes.push(new Fish(sx, cx, sy, cy, 'predator'));
     };
 
-    const loop = () => {
-        let predatorCount = 0;
-        for (let f of fishes) {
-            if (f.type === 'predator' && f.state !== 'eaten' && f.state !== 'husk') predatorCount++;
-        }
-        if (predatorCount === 0) {
-            spawnPredatorFish();
-        }
+    let lastTime = 0;
+    let accumulator = 0;
+    const TIME_STEP = 1000 / 60; // Fixed 60 FPS timestep
 
-        if (Math.random() < 0.015 && fishes.length < 25) {
-            spawnRandomFish();
-        }
+    const loop = (currentTime: number) => {
+        if (!lastTime) lastTime = currentTime;
+        let deltaTime = currentTime - lastTime;
+        if (deltaTime > 250) deltaTime = 250;
+        lastTime = currentTime;
+        accumulator += deltaTime;
 
-        octopus.update(fishes);
-        
-        for (let j = treats.length - 1; j >= 0; j--) {
-            let t = treats[j];
-            t.y += t.vy;
-            if (t.y > window.innerHeight + 10 || !t.active) {
-                treats.splice(j, 1);
+        while (accumulator >= TIME_STEP) {
+            let predatorCount = 0;
+            for (let f of fishes) {
+                if (f.type === 'predator' && f.state !== 'eaten' && f.state !== 'husk') predatorCount++;
             }
-        }
-        
-        for (let j = fishes.length - 1; j >= 0; j--) {
-            let f = fishes[j];
-            if (f.state === 'husk' && f.y > window.innerHeight + 50) fishes.splice(j, 1);
-            else f.update(fishes, treats, octopus);
+            if (predatorCount === 0) {
+                spawnPredatorFish();
+            }
+    
+            if (Math.random() < 0.015 && fishes.length < 25) {
+                spawnRandomFish();
+            }
+    
+            octopus.update(fishes);
+            
+            for (let j = treats.length - 1; j >= 0; j--) {
+                let t = treats[j];
+                t.y += t.vy;
+                if (t.y > window.innerHeight + 10 || !t.active) {
+                    treats.splice(j, 1);
+                }
+            }
+            
+            for (let j = fishes.length - 1; j >= 0; j--) {
+                let f = fishes[j];
+                if (f.state === 'husk' && f.y > window.innerHeight + 50) fishes.splice(j, 1);
+                else f.update(fishes, treats, octopus);
+            }
+            
+            accumulator -= TIME_STEP;
         }
         
         drawBackground(window.innerWidth, window.innerHeight, octopus.time);
