@@ -21,12 +21,17 @@ export class Fish {
     vy: number;
     targetX: number;
     targetY: number;
-    state: 'seeking' | 'random' | 'caught' | 'eaten';
+    state: 'seeking' | 'random' | 'caught' | 'eaten' | 'predator_caught' | 'husk';
     wanderAngle: number = 0;
     hue: number;
     timeOffset: number;
     type: 'normal' | 'predator';
     sizeScale: number;
+    draggedPrey: Fish | null = null;
+    predatorBiteTime: number = 0;
+    dashCooldown: number = 0;
+    dashDuration: number = 0;
+    eatenTime: number = 0;
 
     constructor(x: number, targetX: number, y: number, targetY: number, type: 'normal' | 'predator' = 'normal') {
         this.x = x;
@@ -43,7 +48,21 @@ export class Fish {
     }
 
     update(fishes: Fish[], treats: Treat[]) {
-        if (this.state === 'caught' || this.state === 'eaten') return;
+        if (this.state === 'eaten') {
+            this.eatenTime++;
+            if (this.eatenTime > 60) {
+                this.state = 'husk';
+            }
+            return;
+        }
+
+        if (this.state === 'caught' || this.state === 'predator_caught') return;
+
+        if (this.state === 'husk') {
+            this.y += 0.5;
+            this.x += Math.sin(this.y * 0.02) * 0.3; // slowly sink and sway
+            return;
+        }
 
         if (this.state === 'seeking') {
             let dx = this.targetX - this.x;
@@ -77,25 +96,52 @@ export class Fish {
             let predAvoidX = 0, predAvoidY = 0;
             let preyCentX = 0, preyCentY = 0;
             let preyCount = 0;
+            let caughtAvoidX = 0, caughtAvoidY = 0;
 
             for (let other of fishes) {
-                if (other === this || other.state === 'caught' || other.state === 'eaten') continue;
+                if (other === this || other.state === 'husk') continue;
+                
+                let isCaught = other.state === 'caught' || other.state === 'predator_caught' || other.state === 'eaten';
+                
                 let dx = this.x - other.x;
                 let dy = this.y - other.y;
                 let dist = Math.hypot(dx, dy);
 
                 if (this.type === 'normal' && other.type === 'predator') {
-                    if (dist > 0 && dist < 250) {
+                    if (dist > 0 && dist < 250 && !isCaught) {
                         predAvoidX += dx / dist;
                         predAvoidY += dy / dist;
                     }
                 } else if (this.type === 'predator' && other.type === 'normal') {
-                    if (dist > 0 && dist < 500) {
+                    if (dist > 0 && dist < 500 && !isCaught) {
                         preyCentX += other.x;
                         preyCentY += other.y;
                         preyCount++;
+                        
+                        if (dist < 25 && !this.draggedPrey) {
+                            this.draggedPrey = other;
+                            other.state = 'predator_caught';
+                            this.predatorBiteTime = 0;
+                        } else if (dist < 150 && !this.draggedPrey && this.dashCooldown <= 0) {
+                            let angleToPrey = Math.atan2(other.y - this.y, other.x - this.x);
+                            let currentAngle = Math.atan2(this.vy, this.vx);
+                            let angleDiff = Math.abs(angleToPrey - currentAngle);
+                            angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+                            if (Math.abs(angleDiff) < Math.PI / 4) {
+                                this.dashDuration = 40;
+                                this.dashCooldown = 200;
+                            }
+                        }
                     }
                 } else if (this.type === other.type) {
+                    if (isCaught) {
+                        if (dist > 0 && dist < 120) {
+                            caughtAvoidX += dx / dist;
+                            caughtAvoidY += dy / dist;
+                        }
+                        continue;
+                    }
+
                     if (dist > 0 && dist < separationDistance) {
                         sepX += dx / dist;
                         sepY += dy / dist;
@@ -143,6 +189,12 @@ export class Fish {
                 if (predAvoidSpeed > 0) {
                     this.vx += (predAvoidX / predAvoidSpeed) * 0.3; // High priority escape
                     this.vy += (predAvoidY / predAvoidSpeed) * 0.3;
+                }
+                
+                let caughtAvoidSpeed = Math.hypot(caughtAvoidX, caughtAvoidY);
+                if (caughtAvoidSpeed > 0) {
+                    this.vx += (caughtAvoidX / caughtAvoidSpeed) * 0.08; // Mild avoidance
+                    this.vy += (caughtAvoidY / caughtAvoidSpeed) * 0.08;
                 }
                 
                 // Treat attraction
@@ -200,6 +252,20 @@ export class Fish {
         // Apply drag & limit speed
         let speed = Math.hypot(this.vx, this.vy);
         let maxSpeed = this.type === 'predator' ? 2 : 4;
+        
+        if (this.type === 'predator') {
+            if (this.dashCooldown > 0) this.dashCooldown--;
+            if (this.dashDuration > 0) {
+                this.dashDuration--;
+                maxSpeed *= 2.5; // Boost speed
+                this.vx *= 1.05; // Acceleration
+                this.vy *= 1.05;
+            }
+            if (this.draggedPrey) {
+                maxSpeed *= 0.6; // slow down when dragging prey
+            }
+        }
+
         if (speed > maxSpeed) {
             this.vx = (this.vx / speed) * maxSpeed;
             this.vy = (this.vy / speed) * maxSpeed;
@@ -207,6 +273,18 @@ export class Fish {
 
         this.x += this.vx;
         this.y += this.vy;
+        
+        if (this.type === 'predator' && this.draggedPrey) {
+            this.predatorBiteTime++;
+            let angle = Math.atan2(this.vy, this.vx);
+            this.draggedPrey.x = this.x + Math.cos(angle) * 15 * this.sizeScale;
+            this.draggedPrey.y = this.y + Math.sin(angle) * 15 * this.sizeScale;
+            
+            if (this.predatorBiteTime > 180) {
+                this.draggedPrey.state = 'husk';
+                this.draggedPrey = null;
+            }
+        }
     }
 }
 
@@ -307,7 +385,7 @@ export class Octopus {
                 let target: Fish | null = null;
                 
                 for (let f of fishes) {
-                    if (f.state !== 'caught' && f.state !== 'eaten') {
+                    if (f.state !== 'caught' && f.state !== 'eaten' && f.state !== 'predator_caught' && f.state !== 'husk') {
                         let isTargeted = false;
                         for (let other of this.tentacles) {
                             if (other !== t && other.targetFish === f) {
@@ -335,7 +413,7 @@ export class Octopus {
             }
             
             if (t.state === 'reaching' && t.targetFish) {
-                if (t.targetFish.state === 'caught' || t.targetFish.state === 'eaten') {
+                if (t.targetFish.state === 'caught' || t.targetFish.state === 'eaten' || t.targetFish.state === 'predator_caught' || t.targetFish.state === 'husk') {
                     t.state = 'idle';
                     t.targetFish = null;
                     t.timeOnTarget = 0;
@@ -572,26 +650,50 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         if (f.vx === 0 && f.vy === 0 && f.state === 'caught') {
             angle = octopus.time * 0.1; // Flail when caught
         }
+        if (f.state === 'husk' || f.state === 'eaten') {
+            angle = Math.PI / 2 + Math.sin(f.y * 0.05) * 0.2;
+        } else if (f.state === 'predator_caught') {
+            angle = octopus.time * 0.2; // Flail wildly when caught by predator
+        }
+        
         ctx.rotate(angle);
         
-        ctx.fillStyle = `hsl(${f.hue}, 90%, 55%)`;
+        if (f.state === 'husk' || f.state === 'eaten') {
+            ctx.fillStyle = `hsl(${f.hue}, 10%, 40%)`; // Dull color for husk
+        } else {
+            ctx.fillStyle = `hsl(${f.hue}, 90%, 55%)`;
+        }
+        
         ctx.beginPath();
         ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2);
         ctx.fill();
         
         ctx.beginPath();
         let tailSwing = Math.sin(octopus.time * 0.5 + f.timeOffset) * 6;
-        if(f.state === 'caught') tailSwing *= 3; // Panic
+        if (f.state === 'caught' || f.state === 'predator_caught') tailSwing *= 3; // Panic
+        if (f.state === 'husk' || f.state === 'eaten') tailSwing = 0; // Dead
         
         ctx.moveTo(-10, 0);
         ctx.lineTo(-20, -8 + tailSwing);
         ctx.lineTo(-20, 8 + tailSwing);
         ctx.fill();
         
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(5, -2, 2, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath(); ctx.arc(5.5, -2, 1, 0, Math.PI*2); ctx.fill();
+        if (f.state === 'husk' || f.state === 'eaten') {
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath(); ctx.arc(5, -2, 2, 0, Math.PI*2); ctx.fill();
+            // Dead eye
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(4, -3); ctx.lineTo(6, -1);
+            ctx.moveTo(6, -3); ctx.lineTo(4, -1);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(5, -2, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath(); ctx.arc(5.5, -2, 1, 0, Math.PI*2); ctx.fill();
+        }
         
         ctx.restore();
     };
@@ -625,7 +727,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
     const loop = () => {
         let predatorCount = 0;
         for (let f of fishes) {
-            if (f.type === 'predator' && f.state !== 'eaten') predatorCount++;
+            if (f.type === 'predator' && f.state !== 'eaten' && f.state !== 'husk') predatorCount++;
         }
         if (predatorCount === 0) {
             spawnPredatorFish();
@@ -647,7 +749,7 @@ export function runSimulation(canvas: HTMLCanvasElement): () => void {
         
         for (let j = fishes.length - 1; j >= 0; j--) {
             let f = fishes[j];
-            if (f.state === 'eaten') fishes.splice(j, 1);
+            if (f.state === 'husk' && f.y > window.innerHeight + 50) fishes.splice(j, 1);
             else f.update(fishes, treats);
         }
         
